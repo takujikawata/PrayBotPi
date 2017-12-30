@@ -1,0 +1,11 @@
+
+websocket-client
+boto3
+
+
+Rpi.GPIO
+#pyalsaaudio
+
+
+sudo apt-get install python-alsaaudio
+

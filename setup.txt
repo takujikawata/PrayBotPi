@@ -1,0 +1,16 @@
+
+sudo pip install awscli
+
+aws configure
+
+pip install -r required.txt 
+
+sudo vi /usr/share/alsa/alsa.conf
+
+defaults.ctl.card 1
+defaults.pcm.card 1
+
+
+amixer set PCM 30%
+
+
