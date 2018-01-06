@@ -6,6 +6,7 @@ Module for audio play for pray bot
 
 import time
 from contextlib import closing
+import logging
 from boto3 import Session
 from botocore.exceptions import BotoCoreError, ClientError
 import pygame
@@ -16,8 +17,12 @@ class PrayBotAudio:
     '''
 
     def __init__(self):
+        self.logger = logging.getLogger("praybot")
+
         pygame.init()
         pygame.mixer.init()
+
+        self.in_say = False
 
         self.session = Session(region_name="us-west-2")
         self.polly = self.session.client("polly")
@@ -45,7 +50,8 @@ class PrayBotAudio:
         speak message
         '''
 
-        print "Speak: %s" % _message
+        in_say = True
+        self.logger.info("Speak: %s" % _message)
         try:
             response = self.polly.synthesize_speech(Text="<speak><prosody pitch='+50%'>"
                                                     + _message
@@ -54,7 +60,7 @@ class PrayBotAudio:
                                                     OutputFormat="mp3",
                                                     VoiceId="Mizuki")
         except (BotoCoreError, ClientError) as error:
-            print error
+            self.logger.warning(error)
             return
 
         if "AudioStream" in response:
@@ -64,21 +70,23 @@ class PrayBotAudio:
                     with open(output, "wb") as file:
                         file.write(stream.read())
                 except IOError as error:
-                    print error
+                    self.logger.warning(error)
                     return
 
         else:
-            print "Could not stream audio"
+            self.logger.warning("Could not stream audio")
             return
 
         pygame.mixer.music.load("speech.mp3")
         pygame.mixer.music.play()
 
+        in_say = False
+
     def is_playing(self):
         '''
         check if audio is playing
         '''
-        return pygame.mixer.music.get_busy()
+        return self.in_say or pygame.mixer.music.get_busy()
 
     def volume_up(self):
         '''
@@ -93,7 +101,7 @@ class PrayBotAudio:
         self.set_volume(v)
 
         if not pygame.mixer.music.get_busy():
-            pygame.mixer.music.load("button04a.mp3")
+            pygame.mixer.music.load("audio/button04a.mp3")
             pygame.mixer.music.play()
 
         return v
@@ -111,17 +119,52 @@ class PrayBotAudio:
         self.set_volume(v)
 
         if not pygame.mixer.music.get_busy():
-            pygame.mixer.music.load("button04a.mp3")
+            pygame.mixer.music.load("audio/button04a.mp3")
             pygame.mixer.music.play()
 
         return v
 
+    def greeting(self):
+        '''
+        say greeting message
+        '''
+        import datetime
+        h = datetime.datetime.now().hour
+        a = "audio/hello.mp3"
+        if h >= 4 and h <= 10:
+            a = "audio/goodmorning.mp3"
+        elif h > 10 and h < 17:
+            a = "audio/hello.mp3"
+        else:
+            a = "audio/goodevening.mp3"
+
+        pygame.mixer.music.load(a)
+        pygame.mixer.music.play()
+
+    def play_audio(self, path):
+        '''
+        play audio file
+        '''
+        pygame.mixer.music.load(path)
+        pygame.mixer.music.play()
+
+
+    def wait_playback(self):
+        while self.is_playing():
+            time.sleep(0.1)
+
 if __name__ == "__main__":
+
+
+    logging.basicConfig(format='%(asctime)s:%(levelname)s:%(message)s',
+                        level=logging.DEBUG)
+
     audio = PrayBotAudio()
 
     import sys
     if len(sys.argv) <= 1:
-        message = "こんにちは"
+        audio.greeting()
+        exit(0)
     else:
         message = sys.argv[1]
 

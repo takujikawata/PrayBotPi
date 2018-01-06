@@ -10,14 +10,16 @@ import Queue
 import json
 import threading
 import ConfigParser
+import logging
+import logging.config
 import RPi.GPIO as GPIO
 import websocket
 
-from praybot.audio import PrayBotAudio
-from praybot.motion import PrayBotMotion
-from praybot.animations import PrayBotAnimations
+from praybotlib.audio import PrayBotAudio
+from praybotlib.motion import PrayBotMotion
+from praybotlib.animations import PrayBotAnimations
 
-class PrayBotMain:
+class PrayBot:
     '''
     Main Class for pray bot
     '''
@@ -30,7 +32,9 @@ class PrayBotMain:
     SETTING_FILE = "setting.cfg"
 
     def __init__(self, _maxPrayAtOnce, _prayIfPrayedLessThan):
-        print("PrayBot init..")
+
+        self.logger = logging.getLogger('praybot')        
+        self.logger.info("PrayBot init..")
         self.prayQueue = Queue.Queue()
         self.bOpening = False
 
@@ -41,52 +45,52 @@ class PrayBotMain:
         self.prayIfPrayedLessThan = _prayIfPrayedLessThan
 
         self.config = ConfigParser.SafeConfigParser()
-        self.config.read(PrayBotMain.SETTING_FILE)
+        self.config.read(PrayBot.SETTING_FILE)
 
         v = self.config.getfloat('Audio', 'volume')
         self.audio.set_volume(v)
 
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup(PrayBotMain.VOLUME_UP, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-        GPIO.add_event_detect(PrayBotMain.VOLUME_UP,
+        GPIO.setup(PrayBot.VOLUME_UP, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+        GPIO.add_event_detect(PrayBot.VOLUME_UP,
                               GPIO.RISING, callback=self._gpi_callback, bouncetime=300)
 
-        GPIO.setup(PrayBotMain.VOLUME_DOWN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-        GPIO.add_event_detect(PrayBotMain.VOLUME_DOWN,
+        GPIO.setup(PrayBot.VOLUME_DOWN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+        GPIO.add_event_detect(PrayBot.VOLUME_DOWN,
                               GPIO.RISING, callback=self._gpi_callback, bouncetime=300)
 
-        GPIO.setup(PrayBotMain.POWER_OFF, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-        GPIO.add_event_detect(PrayBotMain.POWER_OFF,
+        GPIO.setup(PrayBot.POWER_OFF, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+        GPIO.add_event_detect(PrayBot.POWER_OFF,
                               GPIO.RISING, callback=self._gpi_callback, bouncetime=300)
 
     def _gpi_callback(self, channel):
 
         input_state = GPIO.input(channel)
         saveSetting = False
-        if channel == PrayBotMain.VOLUME_UP:
+        if channel == PrayBot.VOLUME_UP:
             if input_state:
-                print "volume up"
+                self.logger.info("volume up")
                 v = self.audio.volume_up()
                 self.config.set('Audio', 'volume', '%.2f' % v)
                 saveSetting = True
-        elif channel == PrayBotMain.VOLUME_DOWN:
+        elif channel == PrayBot.VOLUME_DOWN:
             if input_state:
-                print "volume down"
+                self.logger.info("volume down")
                 v = self.audio.volume_down()
                 self.config.set('Audio', 'volume', '%.2f' % v)
                 saveSetting = True
 
         if saveSetting:
-            with open(PrayBotMain.SETTING_FILE, 'wb') as f:
+            with open(PrayBot.SETTING_FILE, 'wb') as f:
                 self.config.write(f)
 
     def start(self):
         '''
         Start pray bot
         '''
-        print "PrayBot start.."
+        self.logger.info("PrayBot start..")
         if self.bOpening:
-            print "websocket client already opening.."
+            self.logger.warning("websocket client already opening..")
             return
 
         self.praying = None
@@ -98,7 +102,7 @@ class PrayBotMain:
         self._connect()
 
     def _pray_finished(self):
-        print "prayFinished"
+        self.logger.info("prayFinished")
 
         if self.praying != None:
             payload = {
@@ -119,6 +123,10 @@ class PrayBotMain:
             self._doPray()
 
     def _doPray(self):
+
+        if  self.in_opening:
+            time.sleep(0.5)
+
         payload = {
             "req_time":self.praying["req_time"],
             "seq":self.praying["seq"],
@@ -148,11 +156,25 @@ class PrayBotMain:
 
         self._pray_finished()
 
+    def say_hello(self):
+        '''
+        do greeting
+        '''
+        self.motion.play_animation(PrayBotAnimations.WAKEUP)
+        #self.motion.play_animation(PrayBotAnimations.PRAY_MOTION, smooth=True)
+        self.audio.greeting()
+        self.motion.wait_animation()
+        self.audio.wait_playback()
+        time.sleep(3)
+        self.motion.play_animation(PrayBotAnimations.REST, smooth=True)
+        self.audio.wait_playback()
+        time.sleep(3)
+        self.motion.stop_all()
 
     def _connect(self):
-        print "PrayBot connecting to server.."
+        self.logger.info("PrayBot connecting to server..")
         websocket.enableTrace(False)
-        self.ws = websocket.WebSocketApp(PrayBotMain.SERVER_URI,
+        self.ws = websocket.WebSocketApp(PrayBot.SERVER_URI,
                                          on_message=self._on_message,
                                          on_error=self._on_error,
                                          on_close=self._on_close)
@@ -199,17 +221,32 @@ class PrayBotMain:
 
     def _on_error(self, ws, error):
         self.bOpening = False
-        print "WebSocket Error:" + error
+        self.logger.warning("WebSocket Error:%s", error)
+        self.audio.play_audio("audio/network_issue.mp3")
 
     def _on_close(self, ws):
         self.bOpening = False
-        print "Websocket closed"
+        self.logger.info("Websocket closed")
 
     def _on_open(self, ws):
-        print "connected to server"
 
+        self.in_opening = True
+        self.logger.info("connected to server")
+
+        self.motion.play_animation(PrayBotAnimations.WAKEUP)
+        time.sleep(1)
+        self.audio.say("祈りのサーバーにつながりました")
+        time.sleep(2)
+        self.audio.wait_playback()
+        self.motion.play_animation(PrayBotAnimations.REST, smooth=True)
+        time.sleep(3)
+        self.motion.wait_animation()
+        self.motion.stop_all()
+
+        self.in_opening = False
 
 if __name__ == "__main__":
-
-    prayBot = PrayBotMain(5,1)
+    logging.config.fileConfig('logging.conf')
+    prayBot = PrayBot(5,1)
+    prayBot.say_hello()
     prayBot.start()

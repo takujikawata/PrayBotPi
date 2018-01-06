@@ -8,7 +8,7 @@ import threading
 import time
 import RPi.GPIO as GPIO
 
-from praybot.animations import PrayBotAnimations
+from praybotlib.animations import PrayBotAnimations
 
 class PrayBotMotion:
     '''

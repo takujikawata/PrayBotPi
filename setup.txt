@@ -11,6 +11,7 @@ defaults.ctl.card 1
 defaults.pcm.card 1
 
 
-amixer set PCM 30%
+sudo timedatectl set-timezone Asia/Tokyo
+amixer set PCM 50%
 
 
