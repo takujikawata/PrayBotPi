@@ -11,4 +11,5 @@ Raspberry pi に接続された1つのサーボとスピーカーをコントロ
 
 祈りの様子
 https://youtu.be/w8JtWhb7gMY
+
 https://www.instagram.com/explore/tags/praybot/
