@@ -16,7 +16,7 @@ class PrayBotMotion:
     '''
 
     SERVO_CHANNELS = [18]
-    RELAY_CHANNELS = [14, 15]
+    RELAY_CHANNELS = [22, 23]
 
     def __init__(self):
 
@@ -35,7 +35,7 @@ class PrayBotMotion:
             self.pwms_running.append(False)
             self.angles.append(0)
         for channel in PrayBotMotion.RELAY_CHANNELS:
-            GPIO.setup(channel, GPIO.OUT, initial=GPIO.LOW)
+            GPIO.setup(channel, GPIO.OUT, initial=GPIO.HIGH)
 
     def set_angle(self, n, angle):
         '''
@@ -122,7 +122,17 @@ class PrayBotMotion:
 
         self._isPlaying = False
 
+    def wakeup(self):
+        '''
+        power on servo motor (set relay 1 on)
+        '''
+        self.set_relay(1, True)
 
+    def rest(self):
+        '''
+        power off servo motor (set relay 1 off)
+        '''
+        self.set_relay(1, False)
 
     def play_animation(self, animation, smooth=False):
         '''
@@ -157,9 +167,9 @@ class PrayBotMotion:
         set relay n to isOn
         '''
         if isOn:
-            GPIO.output(PrayBotMotion.RELAY_CHANNELS[n], GPIO.HIGH)
-        else:
             GPIO.output(PrayBotMotion.RELAY_CHANNELS[n], GPIO.LOW)
+        else:
+            GPIO.output(PrayBotMotion.RELAY_CHANNELS[n], GPIO.HIGH)
             
     def stop_all(self):
         '''
@@ -175,7 +185,7 @@ class PrayBotMotion:
             self.pwms_running[i] = False
 
         for channel in PrayBotMotion.RELAY_CHANNELS:
-            GPIO.output(channel, GPIO.LOW)
+            GPIO.output(channel, GPIO.HIGH)
 
         time.sleep(1)
 
@@ -195,7 +205,7 @@ if __name__ == "__main__":
     motion = PrayBotMotion()
 
     if len(sys.argv) <= 1: 
-        motion.set_relay(0, True)
+        motion.wakeup()
         motion.play_animation(PrayBotAnimations.SAMPLE_MOTION)
         while(motion.is_playing()):
             print("Playing..")
@@ -211,10 +221,12 @@ if __name__ == "__main__":
             exit(-1)
 
         print("set servo angle to : %f" % angle)
+        motion.wakeup()
         motion.set_angle(0, angle)
 
         time.sleep(1)
 
 
     motion.stop_all()
+    motion.rest()
     exit(0)

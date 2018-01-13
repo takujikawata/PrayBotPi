@@ -28,7 +28,7 @@ class PrayBot:
     VOLUME_DOWN = 19
     POWER_OFF = 21
 
-    SERVER_URI = "ws://api.pray.robowebapi.com/praybots"
+    SERVER_URI = "wss://praybot.api.robowebapi.com/praybots"
     SETTING_FILE = "setting.cfg"
 
     def __init__(self, _maxPrayAtOnce, _prayIfPrayedLessThan):
@@ -37,6 +37,9 @@ class PrayBot:
         self.logger.info("PrayBot init..")
         self.prayQueue = Queue.Queue()
         self.bOpening = False
+        self.ptime = 0
+        self.pcnt = 0
+        self.bReady = False
 
         self.audio = PrayBotAudio()
         self.motion = PrayBotMotion()
@@ -79,6 +82,22 @@ class PrayBot:
                 v = self.audio.volume_down()
                 self.config.set('Audio', 'volume', '%.2f' % v)
                 saveSetting = True
+        elif channel == PrayBot.POWER_OFF:
+            if self.bReady:
+                c = time.time()
+                if self.ptime + 3 >= c:
+                    self.pcnt = self.pcnt + 1
+                    if self.pcnt >= 3: 
+                        self.logger.info("shutdown")
+                        self.audio.play_audio("audio/shutdown.mp3")
+                        self.audio.wait_playback()
+
+                        from subprocess import call
+                        call("sudo shutdown -h now", shell=True)
+                else:
+                    self.ptime = c
+                    self.pcnt = 1
+
 
         if saveSetting:
             with open(PrayBot.SETTING_FILE, 'wb') as f:
@@ -134,6 +153,7 @@ class PrayBot:
 
         self._sendMessage(json.dumps(payload))
 
+        self.motion.wakeup()
         time.sleep(2)
         self.motion.play_animation(PrayBotAnimations.WAKEUP)
         time.sleep(1)
@@ -153,6 +173,7 @@ class PrayBot:
         self.motion.wait_animation()
 
         self.motion.stop_all()
+        self.motion.rest()
 
         self._pray_finished()
 
@@ -160,6 +181,7 @@ class PrayBot:
         '''
         do greeting
         '''
+        self.motion.wakeup()
         self.motion.play_animation(PrayBotAnimations.WAKEUP)
         #self.motion.play_animation(PrayBotAnimations.PRAY_MOTION, smooth=True)
         self.audio.greeting()
@@ -170,6 +192,8 @@ class PrayBot:
         self.audio.wait_playback()
         time.sleep(3)
         self.motion.stop_all()
+        self.motion.rest()
+        self.bReady = True
 
     def _connect(self):
         self.logger.info("PrayBot connecting to server..")
@@ -233,6 +257,7 @@ class PrayBot:
         self.in_opening = True
         self.logger.info("connected to server")
 
+        self.motion.wakeup()
         self.motion.play_animation(PrayBotAnimations.WAKEUP)
         time.sleep(1)
         self.audio.say("祈りのサーバーにつながりました")
@@ -242,11 +267,12 @@ class PrayBot:
         time.sleep(3)
         self.motion.wait_animation()
         self.motion.stop_all()
+        self.motion.rest()
 
         self.in_opening = False
 
 if __name__ == "__main__":
     logging.config.fileConfig('logging.conf')
-    prayBot = PrayBot(5,1)
+    prayBot = PrayBot(100,1)
     prayBot.say_hello()
     prayBot.start()

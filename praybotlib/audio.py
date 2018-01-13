@@ -52,6 +52,7 @@ class PrayBotAudio:
 
         in_say = True
         self.logger.info("Speak: %s" % _message)
+        
         try:
             response = self.polly.synthesize_speech(Text="<speak><prosody pitch='+50%'>"
                                                     + _message
